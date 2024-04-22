@@ -392,6 +392,7 @@ void process_action(keyrecord_t *record, action_t action) {
         case ACT_RMODS: {
             uint8_t mods = (action.kind.id == ACT_LMODS) ? action.key.mods : action.key.mods << 4;
             if (event.pressed) {
+                uint8_t suppressed_mods = 0;
                 if (mods) {
                     if (IS_MODIFIER_KEYCODE(action.key.code) || action.key.code == KC_NO) {
                         // e.g. LSFT(KC_LEFT_GUI): we don't want the LSFT to be weak as it would make it useless.
@@ -399,20 +400,33 @@ void process_action(keyrecord_t *record, action_t action) {
                         // Same applies for some keys like KC_MEH which are declared as MEH(KC_NO).
                         add_mods(mods);
                     } else {
-                        add_weak_mods(mods);
+                        suppressed_mods = action.key.mods | (action.key.mods << 4);
+                        suppressed_mods &= get_mods();
+                        del_mods(suppressed_mods);
+                        uint8_t weak_mask = (suppressed_mods >> 4) | suppressed_mods | (suppressed_mods << 4);
+                        add_weak_mods(mods & ~weak_mask);
                     }
                     send_keyboard_report();
                 }
                 register_code(action.key.code);
+                add_mods(suppressed_mods);
             } else {
-                unregister_code(action.key.code);
                 if (mods) {
                     if (IS_MODIFIER_KEYCODE(action.key.code) || action.key.code == KC_NO) {
+                        unregister_code(action.key.code);
                         del_mods(mods);
                     } else {
-                        del_weak_mods(mods);
+                        uint8_t suppressed_mods = action.key.mods | (action.key.mods << 4);
+                        suppressed_mods &= get_mods();
+                        del_mods(suppressed_mods);
+                        unregister_code(action.key.code);
+                        uint8_t weak_mask = (suppressed_mods >> 4) | suppressed_mods | (suppressed_mods << 4);
+                        del_weak_mods(mods & ~weak_mask);
+                        add_mods(suppressed_mods);
                     }
                     send_keyboard_report();
+                } else {
+                    unregister_code(action.key.code);
                 }
             }
         } break;
